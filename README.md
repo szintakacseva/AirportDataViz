@@ -1,10 +1,10 @@
 # Airport Data vizualization
 Airport Traffic data visualisation
 
-Aim of the visualisation
+Aim of the visualisation          
 A static, overview dashbord empowered with interactive html widgets for highlighting the details. By adding Shiny to a flexdashboard, you can create dashboards that enable viewers to change underlying parameters and see the results immediately, or that update themselves incrementally as their underlying data changes.
 
-Data
+Data        
 Yearly, monthly based traffic data of the Budapest Airport for 2013-2017. 
 
     Year, Month: period of time
@@ -21,11 +21,11 @@ Especially, the following highlights can be noted on the dashboard:
 5. Nr of passangers and capacity timeline 
 6. Calculated features: ‘utilization’ - how many 'Capacity' was actually used (in %), ‘seats’ - average nr of passengers on an aircraft
 
-Data visualisation
+Data visualisation       
 For effective visualisation plots, tables és htmlwidgets, especially leaflets were used. Interactivity is realised through Shiny enabled widgets, reactive functions and crosstalk technology. 
 For plots the Economist style have been applied.
 
-Applied tools
+Applied tools       
 main softver: R, R markdown
 IDE: RStudio
 dashbord: flexdashbord
@@ -35,5 +35,5 @@ plots: ggplot2
 data analysis: dplyr, tidyr, reshape2
 sstyle: Economist folyóirat által használt: Economisttheme
 
-Link to the deployed app
+Link to the deployed app      
 https://szintakacseva.shinyapps.io/index/
