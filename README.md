@@ -33,7 +33,7 @@ interactivity: plotly, shiny, crosstalk
 interactive timeseries: dygraphs
 plots: ggplot2
 data analysis: dplyr, tidyr, reshape2
-sstyle: Economist folyóirat által használt: Economisttheme
+style: Economisttheme
 
 Link to the deployed app      
 https://szintakacseva.shinyapps.io/index/
