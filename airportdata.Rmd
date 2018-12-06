@@ -1,0 +1,510 @@
+---
+title: "Budapest Airport Traffic Data"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: columns
+    vertical_layout: fill
+runtime: shiny
+---
+
+```{r options, include=FALSE}
+knitr::opts_chunk$set(warning = FALSE, message=FALSE)
+options(xtable.comment = FALSE)
+```
+
+```{r setup, include=FALSE, message=FALSE}
+if(!require(flexdashboard)){install.packages("flexdashboard")}
+if(!require(leaflet)){install.packages("leaflet")}
+if(!require(leaflet.extras)){install.packages("leaflet.extras")}
+if(!require(htmltools)){install.packages("htmltools")}
+if(!require(readr)){install.packages("readr")}
+if(!require(tidyverse)){install.packages("tidyverse")}
+if(!require(plotly)){install.packages("plotly")}
+if(!require(DT)){install.packages("DT")}
+if(!require(ggplot2)){install.packages("ggplot2")}
+if(!require(xts)){install.packages("xts")}
+if(!require(dygraphs)){install.packages("dygraphs")}
+if(!require(ggthemes)){install.packages("ggthemes")}
+if(!require(xtable)){install.packages("xtable")}
+if(!require(knitr)){install.packages("knitr")}
+if(!require(crosstalk)){install.packages("crosstalk")}
+```
+
+```{r download data}
+dataviz <- read.csv("data/2013_2017_monthly_BUD_traffic.csv", header=TRUE, sep = ";")
+
+#unic destinations with overall summary data and with lon and lat coordinates
+destinations <-read.delim("data/destinations.txt", header=TRUE, sep = ",")
+
+#dataviz with lon and lat coordinates
+dataviz.lon.lat <-read.delim("data/dataviz_lon_lat.txt", header=TRUE, sep = ",")
+```
+
+```{r dataviz.destinations}
+
+dataviz.destinations <- dataviz.lon.lat  %>%
+  filter(Country != "Unknown" ) %>%
+  group_by(City, Country, lon,lat) %>%
+  summarise( ATM = sum(ATM),
+             PAX  = sum(PAX),
+             Capacity = sum(Capacity),
+             potential = round(PAX/Capacity * 100),
+             seats = round(mean(PAX/ATM))) %>%
+  arrange(desc(PAX))
+
+dataviz.destinations <- cbind(rank = as.numeric(rownames(dataviz.destinations)), dataviz.destinations) # add rowid as first column
+
+```
+
+
+```{r top destinations by year}
+
+dataviz.destinations.year <- dataviz.lon.lat  %>%
+  filter(Country != "Unknown" ) %>%
+  group_by(Year, City, Country, lon, lat) %>%
+  summarise( ATM = sum(ATM),
+             PAX  = sum(PAX),
+             Capacity = sum(Capacity),
+             potential = round(PAX/Capacity * 100),
+             seats = round(mean(PAX/ATM))
+            ) %>%
+  arrange(desc(PAX,Year))
+
+#add a summary rank by year and PAX
+dataviz.destinations.year <- dataviz.destinations.year %>% arrange(desc(PAX,Year)) %>%
+    group_by(Year)%>%
+mutate(rank = rank(-PAX, ties.method = "first"))%>%
+ungroup
+
+
+```
+
+
+```{r top destinations per year in table format}
+# TO DO :: in more general format 
+top.dest.2017 <- dataviz  %>%
+  filter(Country != "Unknown", Year =='2017' ) %>%
+  group_by(Year, City, Country) %>%
+  summarise( ATM = sum(ATM),
+             PAX  = sum(PAX),
+             Capacity = sum(Capacity),
+             potential = round(PAX/Capacity * 100),
+             seats = round(mean(PAX/ATM))) %>%
+  arrange(desc(PAX,Year))
+
+# create am empty df
+df_result <-data.frame(City = character(), dif_PAX = numeric(), dif_potential = numeric(), dif_seats=numeric())
+df_result <- df_result[-1,]
+
+# search the relevant values from prev
+for (city in top.dest.2017[1:10,]$City){
+my_df_2017 <- dataviz.destinations.year[ which(dataviz.destinations.year$Year=='2017'& dataviz.destinations.year$City==city), ]
+ 
+# TO DO :: ifelse for newly added cities
+my_df_2016 <- dataviz.destinations.year[ which(dataviz.destinations.year$Year=='2016'& dataviz.destinations.year$City==city), ]
+
+# calculating the percentage change from year 2016
+  df_result <- rbind(df_result, 
+                     data.frame(City = city, 
+              dif_PAX = round((my_df_2017$PAX - my_df_2016$PAX)/my_df_2016$PAX*100),
+              dif_potential = round((my_df_2017$potential - my_df_2016$potential)/my_df_2016$potential*100),
+              dif_seats = round((my_df_2017$seats - my_df_2016$seats)/my_df_2016$seats*100))
+          )
+  }
+
+top.dest.table <- add_column(top.dest.2017[1:10,], dif_PAX = df_result$dif_PAX, dif_potential = df_result$dif_potential, dif_seats = df_result$dif_seats)
+
+
+```
+
+
+```{r data for yearly trends}
+
+dataviz.trend <- dataviz  %>%
+  filter(Country != "Unknown" ) %>%
+  group_by(Year) %>%
+  summarise( 
+             PAX  = sum(PAX),
+             Capacity = sum(Capacity)) %>%
+  arrange(Year)
+
+#gather.dataviz.trend <- dataviz.trend %>% gather(params, values, -Year)
+```
+
+
+```{r data for monthly trends}
+
+dataviz.month <- dataviz  %>%
+  filter(Country != "Unknown" ) %>%
+  group_by(Month) %>%
+  summarise( 
+             PAX  = round(sum(PAX)/5),
+             Capacity = round(sum(Capacity)/5)) %>%
+  arrange(Month)
+
+#gather.dataviz.month <- dataviz.month %>% gather(params, values, -Month)
+```
+
+```{r data for ATM, PAX}
+
+dataviz.ATM.PAX <- dataviz  %>%
+  filter(Country != "Unknown" ) %>%
+  group_by(Year) %>%
+  summarise( 
+             ATM  = sum(ATM),
+             PAX = sum(PAX)) %>%
+  arrange(Year)
+
+```
+
+Overview
+====================================================
+
+Column {data-width=400}
+-----------------------------------------------------------------------
+
+### Top destinations (total passenger traffic)
+
+```{r}
+plot.destinations.year <- ggplot(dataviz.destinations.year[1:50,], 
+                            aes( x = reorder(City, PAX, min), y = PAX), color=City) +
+  geom_bar(stat = "identity", position = "dodge", width = .4)+
+  labs(title = "Top 10 destinations", 
+       subtitle = "",
+       x = "", 
+       y = "")+
+  theme_economist_white(gray_bg = FALSE) +
+    scale_colour_economist()+
+  theme(axis.text.x=element_text(angle=30,hjust=1,vjust=0.5, size = 10, face = "bold"),
+        axis.text.y=element_text(face = "bold"),
+        plot.title=element_text(size = 24)) +
+  coord_flip()+
+  facet_wrap( ~ Year,nrow = 1)
+
+plot.destinations.year
+```
+
+### Year-over-year growth for 2017, compared to 2016
+
+```{r}
+
+top.dest.table <- top.dest.table %>%
+  ungroup(top.dest.table) %>%
+  select(City, Country, PAX, dif_PAX) %>%
+  mutate(dif_PAX = paste(dif_PAX, "%", sep=""))
+
+kable(top.dest.table, knit.table.format = "html", row.names = FALSE, col.names = c("City", "Country", "Passangers", "growth"))
+
+```
+
+```{r}
+
+```
+
+
+Column {data-width=350}
+-----------------------------------------------------------------------
+
+### Year-over-year growth of passangers and capacity for 2013-2017
+
+```{r - trends in PAX}
+dataviz.date <- dataviz  %>%
+  filter(Country != "Unknown" ) %>%
+  mutate(Month = ifelse( Month %in% c(1,2,3,4,5,6,7,8,9), paste("0", Month, "-01",sep=""), paste( Month, "-01",sep=""))) %>%
+  unite(Datum,1:2, sep="-")
+
+dataviz.date <- dataviz.date  %>%
+  filter(Country != "Unknown" ) %>%
+  group_by(Datum) %>%
+  summarise( 
+             
+             PAX = sum(PAX),
+             Capacity = sum(Capacity)) %>%
+  arrange(Datum)
+
+dataviz.date.ts <- ts(dataviz.date[, -1], frequency=12, start=c(2013,1))
+
+dygraph(dataviz.date.ts, main = "Passangers") %>% 
+  dyRangeSelector(dateWindow = c("2013-06-01", "2017-06-01"))
+  
+```
+
+### Year-over-year aircraft movements trend for 2013-2017
+
+```{r plot for ATM}
+dataviz.date <- dataviz  %>%
+  filter(Country != "Unknown" ) %>%
+  mutate(Month = ifelse( Month %in% c(1,2,3,4,5,6,7,8,9), paste("0", Month, "-01",sep=""), paste( Month, "-01",sep=""))) %>%
+  unite(Datum,1:2, sep="-")
+
+dataviz.date <- dataviz.date  %>%
+  filter(Country != "Unknown" ) %>%
+  group_by(Datum) %>%
+  summarise( 
+             ATM = sum(ATM)) %>%
+  arrange(Datum)
+
+dataviz.date.ts <- ts(dataviz.date[, -1], frequency=12, start=c(2013,1))
+
+dygraph(dataviz.date.ts, main = "Aircrafts") %>% 
+  dyRangeSelector(dateWindow = c("2013-06-01", "2017-06-01"))
+
+
+```
+
+Column {data-width=250, data-height=100}
+-----------------------------------------------------------------------
+
+
+### Total number of passangers 2017
+
+```{r}
+
+trend.2017 <- dataviz.trend[ which(dataviz.trend$Year=='2017'), ]
+
+valueBox(trend.2017$PAX, 
+         caption = '',
+        #href = "#trip-duration"
+         icon = 'fa-pencil'
+         )
+
+
+```
+
+
+
+### Top destination from 181 in 2017
+
+```{r}
+
+trend.2017 <- dataviz.trend[ which(dataviz.trend$Year=='2017'), ]
+
+valueBox('London', 
+         caption = '',
+        #href = "#trip-duration"
+         icon = "fa-pencil"
+         )
+
+
+```
+
+
+### Average number of passangers in monthly basis 2013-2017
+
+```{r - monthly plot}
+plot.month <- ggplot(data = dataviz.month) +
+  #geom_line(aes(y = PAX, x = Month),  size = 1.2)+
+  geom_bar(aes(y = PAX, x = Month), stat = "identity", position = "dodge", width = .4)+
+  scale_x_continuous(breaks = c(1,2,3,4,5,6,7,8,9,10,11,12), labels = c("Jan","Feb","Mar","Apr","May","Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")) +
+  scale_y_continuous(labels = scales::comma)+
+  labs(title ="Monthly trends",
+       subtitle = "",
+       x = "", 
+       y = "")+
+  theme_economist_white(gray_bg = FALSE) +
+    scale_colour_economist()+
+  theme(axis.text.x=element_text(angle=30,hjust=1,vjust=0.5, size = 12, face = "bold"),
+        axis.text.y=element_text(face = "bold", size = 12),
+        plot.title=element_text(size = 24)) +
+  coord_flip()
+  
+  
+plot.month
+```
+
+By country
+====================================================
+
+Column {data-width=200 .sidebar}
+---------------------------------------------------------------------------------
+
+### Countries
+
+```{r}
+
+selectInput("countryId", "Country:",
+                sort(unique(dataviz.lon.lat$Country)))
+
+selectInput("yearId","Year:", sort(unique(dataviz.lon.lat$Year)))
+
+country.year.df <- reactive({
+
+  dataviz.lon.lat %>%
+    filter(Country == input$countryId, Year==input$yearId)%>%
+    mutate(PAX_pct = round(PAX / sum(PAX),4)*100,
+           ATM_pct = round(ATM / sum(ATM),4)*100)%>%
+    group_by(City,Year,lon,lat) %>%
+    summarise(PAX = sum(PAX), 
+              Capacity=sum(Capacity),
+              ATM=sum(ATM),
+              PAX_pct = sum(PAX_pct),
+              ATM_pct = sum(ATM_pct))
+
+             
+})
+
+
+```
+
+
+
+Column {data-width=450}
+-----------------------------------------------------------------------
+
+### Destinations on the map
+
+```{r}
+renderLeaflet({
+  
+
+df <- country.year.df()
+
+    df %>% leaflet() %>%
+      addTiles(group = "OSM") %>% 
+      addProviderTiles("CartoDB", group = "CartoDB") %>% 
+      addProviderTiles("Esri", group = "Esri") %>% 
+      addProviderTiles("Esri.WorldImagery", group = "ESRI World Imagery") %>%
+      # Use addLayersControl to allow users to toggle between basemaps
+      addLayersControl(baseGroups = c("OSM", "CartoDB", "Esri", "ESRI World Imagery")) %>%
+      addCircleMarkers(
+          ~ lon ,
+          ~ lat,
+          popup =  ~(paste("<b>",df$City,"</b>","<br>","Passagers:",df$PAX, "<br>","Flights:", df$ATM)),
+          radius = 5,
+          stroke = FALSE,
+          fillOpacity = 0.8,
+          popupOptions = popupOptions(closeButton = FALSE)
+  )
+})
+
+```
+
+
+
+Column {data-width=350}
+-----------------------------------------------------------------------
+
+### Cities, passangers %, aircrafts % in the destination country
+
+```{r}
+
+df <- reactive({country.year.df() %>%
+  ungroup %>%
+  select(City, PAX, PAX_pct, ATM, ATM_pct) %>%
+  mutate(PAX_pct = paste(PAX_pct, "%", sep=""),
+         ATM_pct = paste(ATM_pct, "%", sep=""))
+})
+
+renderTable(df(), colnames = FALSE, striped = TRUE, bordered = TRUE, hover = TRUE)
+```
+
+
+### Number of passangers
+```{r}
+renderPlot({ 
+  ggplot(country.year.df(), aes(x = City,y = PAX)) +
+  geom_bar(stat='identity', position = "dodge", width = 0.2) +
+    scale_y_continuous(labels = scales::comma) +
+    labs( 
+      x = "", 
+      y = "")+
+    theme_economist_white(gray_bg = FALSE) +
+    theme(
+    axis.text.x=element_text(angle=45,hjust=1,vjust=0.5, size = 8, face = "bold")
+    )
+  
+  }
+    )
+
+```
+
+
+### Aircrafts movements
+
+```{r}
+renderPlot({ 
+   ggplot(country.year.df(), aes(x = City,y = ATM)) +
+  geom_bar(stat='identity', position = "dodge", width = 0.2) +
+    labs( 
+      x = "", 
+      y = "")+
+    theme_economist_white(gray_bg = FALSE) +
+    theme(
+    axis.text.x=element_text(angle=45,hjust=1,vjust=0.5, size = 8, face = "bold")
+    )
+ 
+  })
+```
+
+
+Top destinations
+====================================================
+
+Column {data-width=300 .sidebar}
+-----------------------------------------------------------------------
+### Top destinations 
+
+```{r crosstalk}
+# using crosstalk
+
+#reorder the columns
+dataviz.destinations.year <- dataviz.destinations.year[c('rank','Year','City','Country','PAX','ATM','Capacity', 'potential', 'seats', 'lon','lat')]
+
+# wrap data for crosstalk
+sd <-  SharedData$new(dataviz.destinations.year)
+
+filter_select("YearId", "Year", sd, ~Year)
+
+filter_slider("dest_range_sliderId", label = "Select the top destinations range:", sd, column=~rank, step = 1, dragRange = TRUE, width=300)
+
+
+```
+
+Column {data-width=400}
+-----------------------------------------------------------------------
+
+### On the map
+
+```{r}
+# Use SharedData like a dataframe with Crosstalk-enabled widgets
+
+  sd %>% 
+    leaflet() %>% addTiles() %>% 
+          addCircleMarkers(
+          ~ lon ,
+          ~ lat,
+          popup =  ~(paste("<b>",dataviz.destinations.year$City,"</b>","<br>","Passagers:",dataviz.destinations.year$PAX, "<br>","Flights:", dataviz.destinations.year$ATM)),
+          radius = 5,
+          stroke = FALSE,
+          fillOpacity = 0.8,
+          popupOptions = popupOptions(closeButton = FALSE)
+  )
+
+```
+
+Column {data-width=300}
+-----------------------------------------------------------------------
+
+### On table
+
+```{r}
+datatable(sd, extensions="Scroller", style="bootstrap", class="compact", width="100%",
+    options=list(deferRender=TRUE, scrollY=300, scroller=TRUE), rownames = FALSE)
+```
+
+
+Detailed info
+====================================================
+
+### Search
+
+```{r}
+datatable(dataviz, rownames = FALSE,
+extensions = 'Buttons',
+list(
+dom = 'Bfrtip',
+buttons = c('copy', 'csv', 'excel', 'pdf', 'print')
+)
+)
+```
+
