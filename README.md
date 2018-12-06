@@ -33,7 +33,14 @@ interactivity: plotly, shiny, crosstalk
 interactive timeseries: dygraphs
 plots: ggplot2
 data analysis: dplyr, tidyr, reshape2
-sstyle: Economist folyóirat által használt: Economisttheme
+style: Economisttheme
 
 Link to the deployed app      
 https://szintakacseva.shinyapps.io/index/
+
+Files:    
+`preprocess.Rmd` - helper file for adding the lan, lot coordinates.    
+Prerequsite to download and unzip worldcitiespop.txt.gz from [MaxMind](https://www.maxmind.com/en/free-world-cities-database).
+`airportdata.Rmd` - flexdashbord with shiny.
+It needs running shiny environment.
+
