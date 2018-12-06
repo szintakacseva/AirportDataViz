@@ -1,0 +1,153 @@
+---
+title: "Preprocess airport data"
+output: pdf_document
+---
+
+## Codebook
+Year, Month: 
+Country, City: destination
+ATM (AIR Traffic Movement): taking offs and landings
+PAX: nr off passangers
+Capacity: available nr of seats
+
+## Preprocessing steps
+For interactive shiny leaflet it is necessary to add latitude and longitude coordinates to the default data.
+1. Major cities coordinates can be added using the `geocode` function from the `ggmap` library.
+2. wordcities.txt is downloaded from [MaxMind](https://www.maxmind.com/en/free-world-cities-database)
+This step is necessary as no all the cities coordinates are provided by `geocode`.
+3. All the destinations are obtained from the initial df.
+4. For all the destinations the coordinates are set using the `geocode` or wordcities.txt.
+5. Finally, the ccordinates are added to the original dataset.
+
+Files needed for preprocess are in `prepdata`:      
+`worldcities.txt`     
+`2013_2017_monthly_BUD_traffic.csv` 
+
+The resulted files needed for visualisation are copied in `data`:     
+`2013_2017_monthly_BUD_traffic.csv`       
+`dataviz_lon_lat.txt`      
+`destinations.txt`        
+
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(warning = FALSE, message=FALSE)
+```
+
+```{r load, message = FALSE, warning=FALSE}
+library(dplyr)
+library(ggplot2)
+if(!require(scales)){install.packages("scales")}
+if(!require(forcats)){install.packages("forcats")}
+#if(!require(data.table)){install.packages("data.table")}
+if(!require(knitr)){install.packages("knitr")}
+if(!require(tidyr)){install.packages("tidyr")}
+if(!require(reshape2)){install.packages("reshape2")}
+if(!require(tibble)){install.packages("tibble")}
+if(!require(xts)){install.packages("xts")}
+if(!require(dygraphs)){install.packages("dygraphs")}
+if(!require(ggthemes)){install.packages("ggthemes")}
+if(!require(ggmap)){install.packages("ggmap")}
+
+```
+
+
+```{r - load data }
+dataviz <- read.csv("prepdata/2013_2017_monthly_BUD_traffic.csv", header=TRUE, sep = ";")
+# check for missing values
+
+sapply(dataviz, anyNA)
+
+```
+
+```{r destinations}
+dataviz.destinations <- dataviz  %>%
+  filter(Country != "Unknown" ) %>%
+  group_by(City, Country) %>%
+  summarise( ATM = sum(ATM),
+             PAX  = sum(PAX),
+             Capacity = sum(Capacity),
+             potential = round(PAX/Capacity * 100),
+             seats = round(mean(PAX/ATM))) %>%
+  arrange(desc(PAX))
+
+write.table(dataviz.destinations, "destinations.txt", row.names = FALSE, sep =",", col.names = TRUE)
+
+```
+
+
+```{r - worldcities}
+# Read tabular data into R
+worldcities <-read.delim("prepdata/worldcitiespop.txt", header = TRUE, sep = ",", dec=".")
+
+head(worldcities)
+```
+
+
+```{r}
+# get the assumed missing data from worldcities         
+worldcities.dest <- worldcities %>%
+  filter(AccentCity %in% dataviz.destinations$City)%>%
+  group_by(AccentCity, Country)%>%
+  mutate(total = n())%>%
+  arrange(AccentCity)%>%
+  ungroup()%>%
+  filter(!is.na(Population))
+
+write.table(worldcities.dest, "worldcities_2017.txt", row.names = FALSE, sep =",", col.names = TRUE)
+```
+
+```{r}
+#worldcities_2017.txt + prepared by hand
+prepare.2017 <-read.delim("worldcities_2017.txt", header=TRUE, sep = ",")
+#missing.2017 <-read.delim("missing.txt", header=TRUE, sep = ",")
+```
+
+```{r}
+# search for the missing list (prepared by hand)
+missing.dest <- dataviz.destinations %>%
+  filter(!(City  %in% prepare.2017$AccentCity)) %>%
+  arrange(City)
+
+write.table(missing.dest, "missing_2017.txt", row.names = FALSE, sep =",", col.names = TRUE)  
+
+```
+
+
+```{r}
+
+#bind geocode to df
+dataviz.destinations <- bind_cols(dataviz.destinations, geocode(as.character(dataviz.destinations$City),  source = c("dsk")))
+
+# for NAs take lat and lon from prepare.2017 df prepared by hand
+destinations <- dataviz.destinations %>%
+  mutate(lon = ifelse(is.na(lon), prepare.2017$Longitude, lon),
+         lat = ifelse(is.na(lat), prepare.2017$Latitude, lat))
+
+# check for missing values
+sapply(destinations, anyNA)
+
+write.table(destinations, "data/destinations.txt", row.names = FALSE, sep =",", col.names = TRUE)
+
+# add lon,lat to original df
+dataviz.lon.lat <- left_join(dataviz,destinations[c("City","lon","lat")], by ="City") %>%
+  filter(Country != "Unknown" )
+
+write.table(dataviz.lon.lat, "data/dataviz_lon_lat.txt", row.names = FALSE, sep =",", col.names = TRUE)
+
+
+```
+
+
+```{r}
+sapply(dataviz.lon.lat, anyNA)
+
+```
+
+
+```{r}
+#rsconnect::setAccountInfo(name='szintakacseva',
+#			  token='1AFB4DF82AC496A2C2D8F858AF759D88',
+#			  secret='Fc2pGpkaYZZQuYrGhL09DoRDiKvNhgXWplaTwmWm')
+```
+
