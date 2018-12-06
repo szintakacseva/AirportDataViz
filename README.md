@@ -40,7 +40,7 @@ https://szintakacseva.shinyapps.io/index/
 
 Files:    
 `preprocess.Rmd` - helper file for adding the lan, lot coordinates.    
-Prerequsite to download and unzip worldcitiespop.txt.gz from [MaxMind](https://www.maxmind.com/en/free-world-cities-database).
+Prerequsite to download and unzip worldcitiespop.txt.gz from [MaxMind](https://www.maxmind.com/en/free-world-cities-database).         
 `airportdata.Rmd` - flexdashbord with shiny.
 It needs running shiny environment.
 
